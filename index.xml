@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Datinez</title>
+    <link>/</link>
+    <description>Recent content on Datinez</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    <lastBuildDate>Sun, 20 Jan 2019 00:00:00 +0000</lastBuildDate>
+    
+	<atom:link href="/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>My experience as PhD student in Mathematics</title>
+      <link>/2019/01/20/my-experience-as-phd-student-in-mathematics/</link>
+      <pubDate>Sun, 20 Jan 2019 00:00:00 +0000</pubDate>
+      
+      <guid>/2019/01/20/my-experience-as-phd-student-in-mathematics/</guid>
+      <description>In my first post I would like to share with you my experience as PhD in Mathematics in Berlin.
+Starting a PhD is not easy. First of all, you have to apply to many places that might be famous for your research area but it is hard to picture how the experience will look like when you finally get your acceptance letter. This is why the Berlin Mathematical School (BMS) compiles testimonials in their website, to show prospective students what doing a Math PhD in Berlin is like.</description>
+    </item>
+    
+    <item>
+      <title>About</title>
+      <link>/about/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>/about/</guid>
+      <description>Dr. Eva Martínez Mathematician and Data Analyst    Math Slam @BMS Friday 2014   
+Who am I? In June 2018 I got a PhD degree in Mathematics from Freie Universität Berlin under the supervision of Prof. Dr. Alexander Schmitt. My PhD was supported by the IRTG GRK 1800 as part of the Berlin Mathematical School. If you are interested on my thesis on Stability of Arakelov bundles over arithmetic curves and Bridgeland stability conditions on holomorphic triples you can download it here.</description>
+    </item>
+    
+  </channel>
+</rss>
