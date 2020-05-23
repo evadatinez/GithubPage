@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>Posts on Datínez</title>
@@ -6,17 +6,26 @@
     <description>Recent content in Posts on Datínez</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
-    <lastBuildDate>Sun, 20 Jan 2019 00:00:00 +0000</lastBuildDate>
+    <lastBuildDate>Sat, 23 May 2020 00:00:00 +0000</lastBuildDate>
     
 	<atom:link href="/post/index.xml" rel="self" type="application/rss+xml" />
     
     
     <item>
+      <title>Bayesian A/B Testing - Solving Explore vs Exploit Dilemma with Python</title>
+      <link>/2020/05/23/ab_test_explore_exploit/</link>
+      <pubDate>Sat, 23 May 2020 00:00:00 +0000</pubDate>
+      
+      <guid>/2020/05/23/ab_test_explore_exploit/</guid>
+      <description>Lately, I have been on maternity leave and people kept saying to me “sleep when the baby sleeps” but then after surviving the first months I thought “yeah… cook when the baby cooks, develop your career when the baby develops his/her career?”. Then, I have been using the short breaks my baby gives me to read a bit more about (Bayesian) A/B testing and I have taken an interesting online course Bayesian Machine Learning in Python: A/B Testing</description>
+    </item>
+    
+    <item>
       <title>My experience as PhD student in Mathematics</title>
-      <link>/2019/01/20/my-experience-as-phd-student-in-mathematics/</link>
+      <link>/2019/01/20/my_phd_experience/</link>
       <pubDate>Sun, 20 Jan 2019 00:00:00 +0000</pubDate>
       
-      <guid>/2019/01/20/my-experience-as-phd-student-in-mathematics/</guid>
+      <guid>/2019/01/20/my_phd_experience/</guid>
       <description>In my first post I would like to share with you my experience as PhD in Mathematics in Berlin.
 Starting a PhD is not easy. First of all, you have to apply to many places that might be famous for your research area but it is hard to picture how the experience will look like when you finally get your acceptance letter. This is why the Berlin Mathematical School (BMS) compiles testimonials in their website, to show prospective students what doing a Math PhD in Berlin is like.</description>
     </item>

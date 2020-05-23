@@ -1,0 +1,920 @@
+
+
+
+<div id="bayesian-ab-testing---solving-explore-vs-exploit-dilemma-with-python" class="section level1">
+<h1>Bayesian A/B Testing - Solving Explore vs Exploit Dilemma with Python</h1>
+<p>Lately, I have been on maternity leave and people kept saying to me “sleep when the baby sleeps” but then after surviving the first months I thought “yeah… cook when the baby cooks, develop your career when the baby develops his/her career?”. Then, I have been using the short breaks my baby gives me (plus some extra time during the weekends thanks to my amazingly encouraging husband) to read a bit more about (Bayesian) A/B testing and I have taken an interesting online course:
+&gt; <a href="https://www.udemy.com/course/bayesian-machine-learning-in-python-ab-testing/">Bayesian Machine Learning in Python: A/B Testing</a></p>
+<p>This blogpost is summarizes what I have learnt in the course.</p>
+<p>The course introduces A/B testing in the “traditional” (frequentist) way and then discusses the Bayesian A/B testing by solving the Explore vs Exploit Dilemma. Everything is implemented in Python. In this blogpost I am not going to develop all the details. I will focus on the Explore vs Exploit Dilemma, introduce and compare the performance of the 3 algorithms shown in the course with the example of advertisement Click-Through Rate, also using Python.</p>
+<pre class="python"><code>import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from scipy import stats
+import seaborn as sns
+sns.set_style(&#39;darkgrid&#39;, {&#39;axes.facecolor&#39;: &#39;.9&#39;})
+sns.set_palette(palette=&#39;Paired&#39;)
+%matplotlib inline
+
+# Set global plot parameters 
+plt.rcParams[&#39;figure.figsize&#39;] = [12, 6]
+plt.rcParams[&#39;figure.dpi&#39;] = 80</code></pre>
+<div id="the-example---advertisement-click-through-rate" class="section level2">
+<h2>The Example - Advertisement Click-Through Rate</h2>
+<p>This is the example developed in the course which we will also use all over to illustrate the concepts we will introduce.</p>
+<p>Imagine you want to test the performance of 2 advertisements, say ad <span class="math inline">\(A\)</span> and ad <span class="math inline">\(B\)</span>. Picture them, they look the same except for 1 feature (e.g. color/shape of the “button” linking to your page, picture displayed, text of the ad,…) which you modify with the goal to improve the proportion of users that click on the ad when they see it, i.e. the <em>Click-Through Rate</em> (CTR).</p>
+<p>First of all, you would create a business case where you compare the “resources needed” to implement the test and the expected/desired gain, so that you evaluate whether it is worth investing time and resources (i.e. €€).</p>
+<p>Once it is clear you want to move forward with the A/B test, you could do it the “traditional way”. That means you use a sample size calculator, split your traffic (for example 50%-50% so that half of your traffic will be exposed to ad A and the other half to ad B) and let it run until you collect enough data. Then, depending on the “shape” of your data (i.e. the distribution) you will run an hypothesis test (for Bernoulli distributed data, i.e. counting data, you would go for a Chi-square test). Finally, if the p-value is less than some significance level of your choice (tipically 0.05, but sometimes also 0.01), then you reject the null hypothesis and conclude one is significantly better than the other.</p>
+<p>I have created an example dataset by generating 1000 samples from a Bernouilli distribution with pre-fixed mean (0.51 for ad A and 0.31 for ad B), put them together in a dataframe and shuffling the rows to sort them randomly, as shown below.</p>
+<pre class="python"><code>np.random.seed(0)
+
+N = 2000
+real_mean_a = 0.51
+real_mean_b = 0.31
+
+random_ad_a = np.random.binomial(1, real_mean_a, N)
+random_ad_b = np.random.binomial(1, real_mean_b, N)
+
+ads_df = pd.DataFrame({&#39;A&#39;: random_ad_a, &#39;B&#39;: random_ad_b}).melt()
+ads_df.columns = [&#39;advertisement_id&#39;, &#39;action&#39;]
+ads_df.head()</code></pre>
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th>
+</th>
+<th>
+advertisement_id
+</th>
+<th>
+action
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>
+0
+</th>
+<td>
+A
+</td>
+<td>
+0
+</td>
+</tr>
+<tr>
+<th>
+1
+</th>
+<td>
+A
+</td>
+<td>
+0
+</td>
+</tr>
+<tr>
+<th>
+2
+</th>
+<td>
+A
+</td>
+<td>
+0
+</td>
+</tr>
+<tr>
+<th>
+3
+</th>
+<td>
+A
+</td>
+<td>
+0
+</td>
+</tr>
+<tr>
+<th>
+4
+</th>
+<td>
+A
+</td>
+<td>
+1
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<pre class="python"><code># set frac = 1 to shuffle the whole set of rows
+# set random_state = 1 for reproducibility
+df_shuffled = ads_df.sample(frac=1, random_state = 1).reset_index(drop=True)
+
+df_shuffled.head()</code></pre>
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th>
+</th>
+<th>
+advertisement_id
+</th>
+<th>
+action
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>
+0
+</th>
+<td>
+A
+</td>
+<td>
+1
+</td>
+</tr>
+<tr>
+<th>
+1
+</th>
+<td>
+A
+</td>
+<td>
+0
+</td>
+</tr>
+<tr>
+<th>
+2
+</th>
+<td>
+A
+</td>
+<td>
+1
+</td>
+</tr>
+<tr>
+<th>
+3
+</th>
+<td>
+B
+</td>
+<td>
+0
+</td>
+</tr>
+<tr>
+<th>
+4
+</th>
+<td>
+A
+</td>
+<td>
+0
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<pre class="python"><code>alg_comp_in_df = df_shuffled.copy()
+ad_a = alg_comp_in_df[alg_comp_in_df[&#39;advertisement_id&#39;] == &#39;A&#39;][&#39;action&#39;].values
+ad_b = alg_comp_in_df[alg_comp_in_df[&#39;advertisement_id&#39;] == &#39;B&#39;][&#39;action&#39;].values
+
+A_click = sum(ad_a)
+A_noclick = len(ad_a) - A_click
+B_click = sum(ad_b)
+B_noclick = len(ad_b) - B_click
+
+collected_mean_a = ad_a.mean()
+collected_mean_b = ad_b.mean()
+
+print(&#39;len_a:&#39;, len(ad_a), &#39;, A_click:&#39;, A_click, &#39;, collected_mean_a:&#39;, collected_mean_a, &#39;, real_mean_a:&#39;, real_mean_a)
+print(&#39;len_b:&#39;, len(ad_b), &#39;, B_click:&#39;, B_click, &#39;, collected_mean_b:&#39;, collected_mean_b, &#39;, real_mean_b:&#39;, real_mean_b)</code></pre>
+<p>len_a: 2000 , A_click: 1015 , collected_mean_a: 0.5075 , real_mean_a: 0.51
+len_b: 2000 , B_click: 606 , collected_mean_b: 0.303 , real_mean_b: 0.31</p>
+<p>Below you see an example on how one would evaluate this data in a frequentist way, using a <a href="https://en.wikipedia.org/wiki/Chi-squared_test">Chi-squared</a> test.</p>
+<pre class="python"><code>T = np.array([[A_click, A_noclick], [B_click, B_noclick]])
+
+chi2, p, dof, expected = stats.chi2_contingency( T )
+msg = &#39;p-value: {}&#39;
+print( msg.format(p) )</code></pre>
+<p>p-value: 1.9375629625827686e-39</p>
+<pre class="python"><code>if p &lt; 0.05:
+    print(&quot;Reject null hypothesis: There is statistically significant difference between the groups&quot;)
+else:
+    print(&quot;Cannot reject null hypothesis&quot;)</code></pre>
+<p>Reject null hypothesis: There is statistically significant difference between the groups</p>
+</div>
+<div id="the-explore-vs-exploit-dilemma" class="section level2">
+<h2>The Explore vs Exploit Dilemma</h2>
+<p>When I was first introduced to bayesian A/B testing, we were running the tests similar to the frequentist way, i.e. letting run the test for an amount of time and afterwards using the collected data to sample from the distributions and comparing “how much better one version was over the other one”.</p>
+<p>Let us see it using the data I simulated above. The clicks follow a Bernoulli distribution which is a conjugated distribution to a Beta distribution with parameters <span class="math inline">\(a = 1 + \#\rm{successes}\)</span> and <span class="math inline">\(b = 1 + \#\rm{failures}\)</span> (see <a href="https://en.wikipedia.org/wiki/Conjugate_prior#When_likelihood_function_is_a_discrete_distribution">Wikipedia</a>).</p>
+<pre class="python"><code># parameters beta for ad A
+aA = 1 + A_click
+bA = 1 + A_noclick
+# parameters beta for ad B
+aB = 1 + B_click
+bB = 1 + B_noclick</code></pre>
+<pre class="python"><code>M = 3000
+samples_A = np.random.beta(aA, bA, M)
+samples_B = np.random.beta(aB, bB, M)</code></pre>
+<pre class="python"><code>fig, ax = plt.subplots()
+sns.distplot(a=samples_A, label=&#39;A&#39;, ax=ax)
+sns.distplot(a=samples_B, label=&#39;B&#39;, ax=ax)
+ax.axvline(x=real_mean_a, color=&#39;grey&#39;, linestyle=&#39;--&#39;)
+ax.axvline(x=real_mean_b, color=&#39;black&#39;, linestyle=&#39;--&#39;)
+plt.title(&#39;Ads CTR distributions&#39;)
+ax.legend(
+    loc=&#39;center left&#39;, 
+    bbox_to_anchor=(1, 0.5), 
+    labels=[&#39;Real CTR A&#39;, &#39;Real CTR B&#39;, &#39;Distribution of Ad A&#39;, &#39;Distribution of Ad B&#39;]
+)
+plt.savefig(&#39;plots/distributions_samples.png&#39;, dpi=200, bbox_inches=&#39;tight&#39;);</code></pre>
+<div class="figure">
+<img src="blogpost_files/blogpost_13_0.svg" alt="svg" />
+<p class="caption">svg</p>
+</div>
+<p>With the distributions of the CTR of the Ads it is quite evident that the ad A has performed much better than ad B. In any case one can measure “how buch better” is the performance of A with respect to B by sampling from the samples and calculating the probability that ad A is better than ad B as follows:</p>
+<pre class="python"><code>delta_A_B_sample = []
+MM = 10000
+for i in range(MM):
+    condition = np.random.choice(samples_A) &gt; np.random.choice(samples_B)
+    delta_A_B_sample.append(condition)
+
+print(&#39;The probability that ad A is better than ad B is&#39;, np.array(delta_A_B_sample).mean())</code></pre>
+<p>The probability that ad A is better than ad B is 1.0</p>
+<p>A natural question arises:<br />
+&gt; If I see that ad A is performing better, can I stop my experiment and just show ad A?</p>
+<p>To reach a point on which this question makes sense, you first need to show both advertisements (both the “good” and the “bad” ones) and analyze their performance. Eventually, you can use the information you have to show more often the ad that performs better. But how much should I show each add (<strong>Explore</strong>) vs should I just show the better performing ad (<strong>Exploit</strong>)? This is the so-called <strong>Explore-Exploit Dilemma</strong>.</p>
+<p>In the <a href="https://www.udemy.com/course/bayesian-machine-learning-in-python-ab-testing/">course</a>, 3 different algorithms are shown to solve this problem (only the last one is Bayesian). The rest of this post is devoted to introduce these algorithms and compare their performance with the data I simulated above. First I will introduce the logic of each method and then I will illustrate them via a the simulation data generated above.</p>
+</div>
+<div id="solving-the-explore-vs-exploit-dilemma" class="section level2">
+<h2>Solving the Explore vs Exploit Dilemma</h2>
+<div id="strategy-i-epsilon---greedy" class="section level3">
+<h3>Strategy I: Epsilon - Greedy</h3>
+<p>The Epsilon - Greedy algorithm is an intuitive way to solve the Explore-Exploit dilemma.</p>
+<p>In the algorithm you choose a small number (<span class="math inline">\(\epsilon\)</span>) between <span class="math inline">\(0\)</span> and <span class="math inline">\(1\)</span>, which will be the probability of exploration.</p>
+<pre><code>eps = 0.1
+while True:
+    r = rand()
+    if r &lt; eps:
+        # explore
+        show random ad 
+    else:
+        # exploit 
+        show best ad (as determined by #clicks / #impressions)</code></pre>
+<p>One issue is that even when A is significantly better than B, it will still sometimes choose B.</p>
+<p>Let us assume we had <span class="math inline">\(N\)</span> impressions, with <span class="math inline">\(\rm{reward}(\rm{Click}) = 1\)</span>, <span class="math inline">\(\rm{reward}(\rm{noClick}) = 0\)</span>.</p>
+<p>If we consider the extreme case where A always yields a click, and B always yields 0, we have that we show ad B 50% of the times that the random number <span class="math inline">\(r\)</span> was <span class="math inline">\(r &lt; \epsilon\)</span>, i.e. the expected loss is <span class="math inline">\(\epsilon N / 2\)</span>.</p>
+<p>Hence, for <span class="math inline">\(\epsilon = 0.1\)</span>, we loose <span class="math inline">\(0.05N\)</span>. Nevertheless, this is still better than traditional A/B test with no adaptation, where you would loose <span class="math inline">\(0.5N\)</span>.</p>
+</div>
+<div id="strategy-ii-ucb1" class="section level3">
+<h3>Strategy II: UCB1</h3>
+<p><a href="https://link.springer.com/content/pdf/10.1023/A:1013689704352.pdf">UCB</a> stands for <em>Upper Confidence Bound</em>. I have seen it several times phrased as <em>optimism in the face of uncertainty</em>.</p>
+<p>The main idea of the algorithm is to construct a confidence interval of what each ad’s true performance might be. Then, the algorithm selects the ad with the highest UCB. This is why “optimism”, because one is assuming the ad will behave as well as its UCB. It kind of makes sense because at the end of the day we are trying to find the ad with the highest CTR.</p>
+<p>What is this bound? The <strong><a href="https://en.wikipedia.org/wiki/Hoeffding%27s_inequality">Chernoff-Hoeffding bound</a></strong> says:
+<span class="math display">\[P(\hat\mu &gt; \mu + \epsilon) \leq \rm{exp}(-2\epsilon^{2} N ),\]</span>
+for some <span class="math inline">\(\epsilon &gt; 0\)</span>, where <span class="math inline">\(N\)</span> denotes the number of observations (i.e. the sample size), <span class="math inline">\(\hat\mu\)</span> denotes the true CTR (mean) and <span class="math inline">\(\mu\)</span> the sample mean (i.e. the CTR of the data observed so far).</p>
+<p>For each ad <span class="math inline">\(j = A,B\)</span>, we want to pick a bound <span class="math inline">\(\epsilon_j\)</span> so that the true mean <span class="math inline">\(\hat\mu_j &lt; \mu_j + \epsilon_j\)</span>. Thus, <span class="math inline">\(\rm{exp}(-2\epsilon_j^{2} N )\)</span> should be a small probability.<br />
+Say we set a threshold <span class="math inline">\(p_j\)</span>, i.e. <span class="math inline">\(p_j = \rm{exp}(-2\epsilon_j^{2} N_j )\)</span>. Then,
+<span class="math display">\[ \epsilon_j = \sqrt{-\dfrac{\log p_j}{2 N_j}}\]</span>
+and we can set <span class="math inline">\(p_j = N^{-4}\)</span> so that we obtain the epsilon:
+<span class="math display">\[\epsilon_j = \sqrt{\dfrac{2\log N}{N_j}}\]</span>
+where <span class="math inline">\(N\)</span> is the total number of ads displayed and <span class="math inline">\(N_j\)</span> the number of times that ad <span class="math inline">\(j\)</span> was displayed.</p>
+<p>The discussion above is explained very nicely in <a href="https://lilianweng.github.io/lil-log/2018/01/23/the-multi-armed-bandit-problem-and-its-solutions.html#hoeffdings-inequality">Lilian Weng’s blog</a>.</p>
+<p>Now the algorithm is as follows:</p>
+<pre><code>N = 0
+Nj = 0 for all bandits j 
+while True:
+    j* = argmax(mu_j + sqrt(2log(N) / Nj))
+
+    Show ad j*
+    Update mu_j*
+    N++
+    Nj*++</code></pre>
+<p>Let us observe closely the term <code>j* = argmax(mu_j + sqrt(2log(N) / Nj))</code>:<br />
+- the first term is the CTR estimate (if high, we exploit more often)<br />
+- the second term depends on <span class="math inline">\(N\)</span> and <span class="math inline">\(N_j\)</span> (so if <span class="math inline">\(N\)</span> is high, but <span class="math inline">\(N_j\)</span> is low, we are not so confident about the <span class="math inline">\(CTR_j\)</span> so we explore this more).</p>
+<p>It can be shown that the expected loss is proportional to <span class="math inline">\(\log(N)\)</span> (<a href="https://link.springer.com/content/pdf/10.1023/A:1013689704352.pdf">see Theorem 1 on this paper</a>).</p>
+<p>Compared to the Epsilon-Greedy algorithm whose loss is proportional to <span class="math inline">\(N\)</span>, in the long run UCB1 will perform much better.</p>
+</div>
+<div id="strategy-iii-bayesian" class="section level3">
+<h3>Strategy III: Bayesian</h3>
+<p>This method is also called <a href="https://en.wikipedia.org/wiki/Thompson_sampling">Thompson sampling</a>. This technique aims to perform actions to maximize the cumulative rewards.</p>
+<p>It basically draws samples from the current posterior distribution of all the ads with the data observed so far and exploits the one giving the greatest sample value. Conceptually, we are trusting that we are exploiting the ad which will provide the highgest reward.</p>
+<p>Then, the algorithm reads:</p>
+<pre><code>while True:
+    Draw a random sample from all ads&#39; current Beta(aj, bj)
+    j* = ad that gives us maximum sample
+    x = show ad j*
+    aj* = aj* + x
+    bj* = bj* + 1 - x</code></pre>
+<p>In most practical applications, it can be quite computationally expensive to estimate posterior distributions using Bayesian inference, so in general this technique comes together with approximate sampling techniques. I recommend <a href="https://arxiv.org/pdf/1707.02038.pdf">this tutorial</a> to learn more about thompson sampling.</p>
+</div>
+<div id="comparison-of-the-different-strategies" class="section level3">
+<h3>Comparison of the different strategies</h3>
+<p>In this section I have implemented and compared the 3 algorithms introduced above.</p>
+<p>We want to answer the following questions:<br />
+- Which method converged to the best advertisement the fastest?<br />
+- What is the total loss compared to what you would have gotten if you already knew which the best advertisement was and displayed only that ad every time?</p>
+<p>The instructor of the course provided a script to simulate the process of running an http web service using <code>flask</code>, just like a real website, to treat the data generated above (and stored in a <code>.csv</code> file) like real-time data. For simplicity here I show a iterative direct implementation.</p>
+<p>I first define a class <code>Advertisement</code> whose attributes are its own name, the values <code>1/0</code> of <code>click/no click</code> from the input dataframe, and then a bunch of attributes with the shape <code>clicks_method_name</code> (resp. <code>views_method_name</code>) to record the clicks (resp. views/impressions) where <code>method_name</code> will be each algorithm we will be comparing:<br />
+- <code>no_adapt</code> i.e. no adaptation, displaying random add with 50% split<br />
+- <code>eps</code> i.e. Epsilon-Greedy algorithm<br />
+- <code>ucb1</code> i.e. UCB1 algorithm<br />
+- <code>bay</code> i.e. Bayesian (Thompson) algorithm</p>
+<pre class="python"><code>class Advertisement:
+    def __init__(self, name, df):
+        self.name = name
+        # values 1/0 of click/no click
+        adv = df[df[&#39;advertisement_id&#39;] == name]
+        self.data = adv[&#39;action&#39;].values
+        # No adaptation
+        self.clicks_no_adapt = 0
+        self.views_no_adapt = 0
+        # Epsilon-Greedy
+        self.clicks_eps = 0
+        self.views_eps = 0
+        # UCB1
+        self.clicks_ucb1 = 0
+        self.views_ucb1 = 0
+        # Bayesian
+        self.clicks_bay = 0
+        self.views_bay = 0
+
+    def sample(self):
+        # only in bayesian method
+        a = 1 + self.clicks_bay
+        b = 1 + self.views_bay - self.clicks_bay
+        return np.random.beta(a, b)
+
+    def add_click(self, method_name):
+        if method_name == &#39;no_adapt&#39;:
+            self.clicks_no_adapt += 1
+        elif method_name == &#39;epsilon&#39;:
+            self.clicks_eps += 1
+        elif method_name == &#39;ucb1&#39;:
+            self.clicks_ucb1 += 1
+        elif method_name == &#39;bayesian&#39;:
+            self.clicks_bay += 1
+
+    def add_view(self, method_name):
+        if method_name == &#39;no_adapt&#39;:
+            self.views_no_adapt += 1
+        elif method_name == &#39;epsilon&#39;:
+            self.views_eps += 1
+        elif method_name == &#39;ucb1&#39;:
+            self.views_ucb1 += 1
+        elif method_name == &#39;bayesian&#39;:
+            self.views_bay += 1</code></pre>
+<p>Next, we need functions to act as a server request, returning the advertisement to be displayed. I create one for each method.</p>
+<pre class="python"><code>def request_no_adapt(ads, p=0.5):
+    &quot;&quot;&quot;Returns random ad to display with split 100*p / 100-(100*p) %.&quot;&quot;&quot;
+    ad_a, ad_b = ads
+    # show random ad 100*p % / 100-(100*p) %
+    random_ad = np.random.binomial(1, p)
+    if(random_ad == 0):
+        ad = &#39;A&#39;
+        ad_a.add_view(&#39;no_adapt&#39;)
+    else:
+        ad = &#39;B&#39;
+        ad_b.add_view(&#39;no_adapt&#39;)
+
+    return {&#39;advertisement_id&#39;: ad, &#39;method_name&#39;: &#39;no_adapt&#39;}
+
+
+def request_epsilon(ads, eps=0.1):
+    &quot;&quot;&quot;Returns ad to display using Epsilon-Greedy algorithm.&quot;&quot;&quot;
+    ad_a, ad_b = ads
+    # create random number between 0 and 1
+    r = np.random.random()
+    if r &lt; eps or ad_a.views_eps*ad_b.views_eps == 0:
+        # show random ad
+        random_ad = np.random.binomial(1, 0.5)
+        if(random_ad == 0):
+            ad = &#39;A&#39;
+            ad_a.add_view(&#39;epsilon&#39;)
+        else:
+            ad = &#39;B&#39;
+            ad_b.add_view(&#39;epsilon&#39;)
+    else:
+        # show best add
+        if ad_a.clicks_eps/ad_a.views_eps &gt; \
+                ad_b.clicks_eps/ad_b.views_eps:
+            ad = &#39;A&#39;
+            ad_a.add_view(&#39;epsilon&#39;)
+        else:
+            ad = &#39;B&#39;
+            ad_b.add_view(&#39;epsilon&#39;)
+
+    return {&#39;advertisement_id&#39;: ad, &#39;method_name&#39;: &#39;epsilon&#39;}
+
+
+def request_ucb1(ads):
+    &quot;&quot;&quot;Returns ad to display using UCB1 algorithm.&quot;&quot;&quot;
+    ad_a, ad_b = ads
+    cA = ad_a.clicks_ucb1
+    vA = ad_a.views_ucb1
+    cB = ad_b.clicks_ucb1
+    vB = ad_b.views_ucb1
+    if vA*vB == 0:
+        # show random ad
+        random_ad = np.random.binomial(1, 0.5)
+        if(random_ad == 0):
+            ad = &#39;A&#39;
+            ad_a.add_view(&#39;ucb1&#39;)
+        else:
+            ad = &#39;B&#39;
+            ad_b.add_view(&#39;ucb1&#39;)
+    else:
+        # calculate mu_j + eps_j for each bandit j
+        # i.e. mu_j + sqrt(2ln(N) / Nj)
+        jA = cA/vA + np.sqrt(2*np.log(vA + vB)/vA)
+        jB = cB/vB + np.sqrt(2*np.log(vA + vB)/vB)
+
+        # show best add
+        if jA &gt; jB:
+            ad = &#39;A&#39;
+            ad_a.add_view(&#39;ucb1&#39;)
+        else:
+            ad = &#39;B&#39;
+            ad_b.add_view(&#39;ucb1&#39;)
+
+    return {&#39;advertisement_id&#39;: ad, &#39;method_name&#39;: &#39;ucb1&#39;}
+
+
+def request_bayesian(ads):
+    &quot;&quot;&quot;Returns ad to display using Bayesian (Thompson) algorithm.&quot;&quot;&quot;
+    ad_a, ad_b = ads
+    sample_a = ad_a.sample()
+    sample_b = ad_b.sample()
+    if sample_a &gt; sample_b:
+        ad = &#39;A&#39;
+        ad_a.add_view(&#39;bayesian&#39;)
+    else:
+        ad = &#39;B&#39;
+        ad_b.add_view(&#39;bayesian&#39;)
+    return {&#39;advertisement_id&#39;: ad, &#39;method_name&#39;: &#39;bayesian&#39;}
+
+
+def request_ad(method_name, ads):
+    &quot;&quot;&quot;Calls request function according to method name.&quot;&quot;&quot;
+    if method_name == &#39;no_adapt&#39;:
+        return request_no_adapt(ads, 0.5)
+    elif method_name == &#39;epsilon&#39;:
+        return request_epsilon(ads, 0.1)
+    elif method_name == &#39;ucb1&#39;:
+        return request_ucb1(ads)
+    elif method_name == &#39;bayesian&#39;:
+        return request_bayesian(ads)
+    # for debugging purposes
+    return &#39;No request method found&#39;</code></pre>
+<p>We also need a function to check in our dataset whether the ad should be clicked when displayed and updates its clicks data accordingly.</p>
+<pre class="python"><code>def click_ad(method_name, ad):
+    &quot;&quot;&quot;Records click ad according to dataset input.&quot;&quot;&quot;
+    if method_name == &#39;no_adapt&#39;:
+        views = ad.views_no_adapt
+    elif method_name == &#39;epsilon&#39;:
+        views = ad.views_eps
+    elif method_name == &#39;ucb1&#39;:
+        views = ad.views_ucb1
+    elif method_name == &#39;bayesian&#39;:
+        views = ad.views_bay
+
+    action = ad.data[views]
+    if action == 1:
+        # only click the ad if our dataset determines that we should
+        ad.add_click(method_name)
+        return {&#39;advertisement_id&#39;: ad.name, &#39;method_name&#39;: method_name}</code></pre>
+<p>Now we are ready to run the process.</p>
+<p>First, we have to initialize the variables for the ads, counts and summary list. We will need them to record the data of the advertisements and the different stats we will be interested on.</p>
+<pre class="python"><code># initialize advertisements
+ad_a = Advertisement(&#39;A&#39;, alg_comp_in_df)
+ad_b = Advertisement(&#39;B&#39;, alg_comp_in_df)
+
+count = 0
+
+df_list = []</code></pre>
+<p>Then, we iterate until there is no data left for either ad for one of the methods.</p>
+<pre class="python"><code>while ad_a.views_no_adapt &lt; N - 1 and ad_b.views_no_adapt &lt; N - 1 and \
+        ad_a.views_eps &lt; N - 1 and ad_b.views_eps &lt; N - 1 and \
+        ad_a.views_ucb1 &lt; N - 1 and ad_b.views_ucb1 &lt; N - 1 and \
+        ad_a.views_bay &lt; N - 1 and ad_b.views_bay &lt; N - 1:
+    # quit when there&#39;s no data left for either ad
+    # no adaptation method
+    r_no_adapt = request_ad(&#39;no_adapt&#39;, (ad_a, ad_b))
+    if r_no_adapt[&#39;advertisement_id&#39;] == &#39;A&#39;:
+        click_ad(&#39;no_adapt&#39;, ad_a)
+    else:
+        click_ad(&#39;no_adapt&#39;, ad_b)
+
+    # epsilon greedy method
+    r_eps = request_ad(&#39;epsilon&#39;, (ad_a, ad_b))
+    if r_eps[&#39;advertisement_id&#39;] == &#39;A&#39;:
+        click_ad(&#39;epsilon&#39;, ad_a)
+    else:
+        click_ad(&#39;epsilon&#39;, ad_b)
+
+    # ucb1 method
+    r_ucb1 = request_ad(&#39;ucb1&#39;, (ad_a, ad_b))
+    if r_ucb1[&#39;advertisement_id&#39;] == &#39;A&#39;:
+        click_ad(&#39;ucb1&#39;, ad_a)
+    else:
+        click_ad(&#39;ucb1&#39;, ad_b)
+
+    # bayesian method
+    r_bay = request_ad(&#39;bayesian&#39;, (ad_a, ad_b))
+    if r_bay[&#39;advertisement_id&#39;] == &#39;A&#39;:
+        click_ad(&#39;bayesian&#39;, ad_a)
+    else:
+        click_ad(&#39;bayesian&#39;, ad_b)
+
+    # log some stats
+    count += 1
+
+    df = pd.DataFrame(np.array([[count,
+                                ad_a.clicks_no_adapt, ad_b.clicks_no_adapt,
+                                ad_a.clicks_eps, ad_b.clicks_eps,
+                                ad_a.clicks_ucb1, ad_b.clicks_ucb1,
+                                ad_a.clicks_bay, ad_b.clicks_bay,
+                                ad_a.views_no_adapt, ad_b.views_no_adapt,
+                                ad_a.views_eps, ad_b.views_eps,
+                                ad_a.views_ucb1, ad_b.views_ucb1,
+                                ad_a.views_bay, ad_b.views_bay]]),
+                      columns=[&#39;ad_request_num&#39;,
+                               &#39;clicksA_no_adapt&#39;, &#39;clicksB_no_adapt&#39;,
+                               &#39;clicksA_epsilon&#39;, &#39;clicksB_epsilon&#39;,
+                               &#39;clicksA_ucb1&#39;, &#39;clicksB_ucb1&#39;,
+                               &#39;clicksA_bayesian&#39;, &#39;clicksB_bayesian&#39;,
+                               &#39;viewsA_no_adapt&#39;, &#39;viewsB_no_adapt&#39;,
+                               &#39;viewsA_epsilon&#39;, &#39;viewsB_epsilon&#39;,
+                               &#39;viewsA_ucb1&#39;, &#39;viewsB_ucb1&#39;,
+                               &#39;viewsA_bayesian&#39;, &#39;viewsB_bayesian&#39;
+                               ])
+
+    df_list.append(df)</code></pre>
+<p>Let us consolidate the stats we have recorded:</p>
+<pre class="python"><code># Consolidate stats DataFrame
+df_final = pd.concat(df_list, axis=0)
+
+# Calculate CTRs for each method
+# No adaptation
+df_final[&#39;muA_no_adapt&#39;] = np.where(df_final[&#39;viewsA_no_adapt&#39;] != 0,
+                                    round(df_final[&#39;clicksA_no_adapt&#39;] /
+                                    df_final[&#39;viewsA_no_adapt&#39;], 3), 0)
+df_final[&#39;muB_no_adapt&#39;] = np.where(df_final[&#39;viewsB_no_adapt&#39;] != 0,
+                                    round(df_final[&#39;clicksB_no_adapt&#39;] /
+                                    df_final[&#39;viewsB_no_adapt&#39;], 3), 0)
+
+# Epsilon-Greedy algorithm
+df_final[&#39;muA_epsilon&#39;] = np.where(df_final[&#39;viewsA_epsilon&#39;] != 0,
+                               round(df_final[&#39;clicksA_epsilon&#39;] /
+                               df_final[&#39;viewsA_epsilon&#39;], 3), 0)
+df_final[&#39;muB_epsilon&#39;] = np.where(df_final[&#39;viewsB_epsilon&#39;] != 0,
+                               round(df_final[&#39;clicksB_epsilon&#39;] /
+                               df_final[&#39;viewsB_epsilon&#39;], 3), 0)
+
+# UCB1 algorithm
+df_final[&#39;muA_ucb1&#39;] = np.where(df_final[&#39;viewsA_ucb1&#39;] != 0,
+                                round(df_final[&#39;clicksA_ucb1&#39;] /
+                                df_final[&#39;viewsA_ucb1&#39;], 3), 0)
+df_final[&#39;muB_ucb1&#39;] = np.where(df_final[&#39;viewsB_ucb1&#39;] != 0,
+                                round(df_final[&#39;clicksB_ucb1&#39;] /
+                                df_final[&#39;viewsB_ucb1&#39;], 3), 0)
+
+# Bayesian (Thompson) algorithm
+df_final[&#39;muA_bayesian&#39;] = np.where(df_final[&#39;viewsA_bayesian&#39;] != 0,
+                                    round(df_final[&#39;clicksA_bayesian&#39;] /
+                                    df_final[&#39;viewsA_bayesian&#39;], 3), 0)
+df_final[&#39;muB_bayesian&#39;] = np.where(df_final[&#39;viewsB_bayesian&#39;] != 0,
+                                    round(df_final[&#39;clicksB_bayesian&#39;] /
+                                    df_final[&#39;viewsB_bayesian&#39;], 3), 0)
+
+alg_comp_out_df = df_final.copy()</code></pre>
+<p>The first thing we can do is to observe the evolution of the distributions over time. For this, I have implemented a function to plot the ads distributions iteratively at a certain step.</p>
+<pre class="python"><code>def plot(df_rn, vars_data, i):
+    &quot;&quot;&quot; Plots the ads distributions given by vars_data.
+    If i&gt;=0, it saves a .png file with iterative file name.
+    &quot;&quot;&quot;
+    fig, ax = plt.subplots()
+    x = np.linspace(0, 1, 200)
+    for velt in vars_data:
+        clicks_col, views_col, ad, method = velt
+        a = 1 + df_rn[clicks_col]
+        b = 1 + df_rn[views_col] - df_rn[clicks_col]
+        y = stats.beta.pdf(x, a, b)
+        plt.plot(x, y, label=ad + &#39;-&#39; + method)
+
+    ax.axvline(x=real_mean_a, color=&#39;grey&#39;, linestyle=&#39;--&#39;, label=&#39;Real CTR A&#39;)
+    ax.axvline(x=real_mean_b, color=&#39;black&#39;, linestyle=&#39;--&#39;, label=&#39;Real CTR B&#39;)
+    plt.title(&#39;Ads distributions after %s views&#39; % df_rn[&#39;ad_request_num&#39;])
+    plt.legend(loc=&#39;center left&#39;, bbox_to_anchor=(1, 0.5))
+    if i &gt;= 0:
+        # if i &gt;=0, save the plot in .png format
+        # clean the index to get iterative filename
+        index = i
+        if index &lt; 10:
+            index = &#39;0&#39; + str(i)
+        plt.savefig(f&#39;plots/plot_ads_dist/plot_{index}.png&#39;, dpi=200, bbox_inches=&#39;tight&#39;)
+    
+    plt.show()</code></pre>
+<pre class="python"><code>vars_data = [
+    [&#39;clicksA_no_adapt&#39;, &#39;viewsA_no_adapt&#39;, &#39;A&#39;, &#39;no_adapt&#39;],
+    [&#39;clicksB_no_adapt&#39;, &#39;viewsB_no_adapt&#39;, &#39;B&#39;, &#39;no_adapt&#39;],
+    [&#39;clicksA_epsilon&#39;, &#39;viewsA_epsilon&#39;, &#39;A&#39;, &#39;epsilon&#39;],
+    [&#39;clicksB_epsilon&#39;, &#39;viewsB_epsilon&#39;, &#39;B&#39;, &#39;epsilon&#39;],
+    [&#39;clicksA_ucb1&#39;, &#39;viewsA_ucb1&#39;, &#39;A&#39;, &#39;ucb1&#39;],
+    [&#39;clicksB_ucb1&#39;, &#39;viewsB_ucb1&#39;, &#39;B&#39;, &#39;ucb1&#39;],
+    [&#39;clicksA_bayesian&#39;, &#39;viewsA_bayesian&#39;, &#39;A&#39;, &#39;bayesian&#39;],
+    [&#39;clicksB_bayesian&#39;, &#39;viewsB_bayesian&#39;, &#39;B&#39;, &#39;bayesian&#39;]
+]</code></pre>
+<p>I have defined a list <code>plot_points</code> with the steps I want to plot, i.e. to plot the distributions after <span class="math inline">\(x\)</span> number of views. The code below shows how I iterate through this list to plot each step. The result is a bunch of plots that I have transformed into a <code>.gif</code> file, using <code>ImageMagik</code>, with the bash command below. I have learnt to do it on a mac from this post: <a href="https://stackoverflow.com/questions/20126812/mac-terminal-create-animated-gif-from-png-files">create .gif from .png files</a>.</p>
+<pre class="python"><code>plot_points = [1, 5, 10, 20, 50, 100, 200, 500, 1000, 1500, alg_comp_out_df.shape[0]]
+for i, plot_pt in enumerate(plot_points):
+    df_rn = alg_comp_out_df.iloc[plot_pt - 1]
+    plot(df_rn, vars_data, i)</code></pre>
+<div class="figure">
+<img src="blogpost_files/blogpost_35_0.svg" alt="svg" />
+<p class="caption">svg</p>
+</div>
+<div class="figure">
+<img src="blogpost_files/blogpost_35_1.svg" alt="svg" />
+<p class="caption">svg</p>
+</div>
+<div class="figure">
+<img src="blogpost_files/blogpost_35_2.svg" alt="svg" />
+<p class="caption">svg</p>
+</div>
+<div class="figure">
+<img src="blogpost_files/blogpost_35_3.svg" alt="svg" />
+<p class="caption">svg</p>
+</div>
+<div class="figure">
+<img src="blogpost_files/blogpost_35_4.svg" alt="svg" />
+<p class="caption">svg</p>
+</div>
+<div class="figure">
+<img src="blogpost_files/blogpost_35_5.svg" alt="svg" />
+<p class="caption">svg</p>
+</div>
+<div class="figure">
+<img src="blogpost_files/blogpost_35_6.svg" alt="svg" />
+<p class="caption">svg</p>
+</div>
+<div class="figure">
+<img src="blogpost_files/blogpost_35_7.svg" alt="svg" />
+<p class="caption">svg</p>
+</div>
+<div class="figure">
+<img src="blogpost_files/blogpost_35_8.svg" alt="svg" />
+<p class="caption">svg</p>
+</div>
+<div class="figure">
+<img src="blogpost_files/blogpost_35_9.svg" alt="svg" />
+<p class="caption">svg</p>
+</div>
+<div class="figure">
+<img src="blogpost_files/blogpost_35_10.svg" alt="svg" />
+<p class="caption">svg</p>
+</div>
+<pre class="bash"><code>%%bash
+convert -delay 100 plots/plot_ads_dist/*.png plots/distributions.gif</code></pre>
+<p>We observe that:</p>
+<ul>
+<li>After 20 views, ad A sems to be underperforming in all algorithms.<br />
+</li>
+<li>After 50 views, it seems like ad A, with UCB1 and no adaptation are much closer to reality but with Epsilon-Greedy and Bayesian it is still underperforming.<br />
+</li>
+<li>After 100 views, all algorithms except Epsilon-Greedy are close to the real distribution of ad A.<br />
+</li>
+<li>After 500 views, all algorithms have captured the real distribution of the CTR for ad A.<br />
+</li>
+<li>Finally, after finishing the experiment (after 2045 views), all distributions of ad A have converged around the real CTR of A except no adaptation, which seems to be a bit higher than the rest. Here the most interesting thing is regarding ad B, where the height of its distribution is exactly as expected. Below, I sort the results from worst to best:
+<ul>
+<li>No adaptation is the one that has explored ad B the most and therefore is closer to the real CTR of ad B.<br />
+</li>
+<li>Expsilon - Greedy<br />
+</li>
+<li>UCB1<br />
+</li>
+<li>Bayesian (Thompson) is the one that has explored ad B the least and therefore the distribution is wider and farther from the real CTR.</li>
+</ul></li>
+</ul>
+<p>As you can see, the last plot is worth observing it carefully, I include it statically below:</p>
+<pre class="python"><code>df_rn = alg_comp_out_df.iloc[alg_comp_out_df.shape[0] - 1]
+plot(df_rn, vars_data, i=-1)</code></pre>
+<div class="figure">
+<img src="blogpost_files/blogpost_39_0.svg" alt="svg" />
+<p class="caption">svg</p>
+</div>
+<p>Another interesting thing to plot is the CTR (referenced as Calculated CTR) over ad request number, to see how far/close they converge to the real CTR and compare how fast is this convergence.</p>
+<pre class="python"><code>fig, ax = plt.subplots(4, 1, figsize=(12, 12))
+
+# No adaptation
+dg_eps = alg_comp_out_df \
+    [[&#39;ad_request_num&#39;, &#39;muA_no_adapt&#39;, &#39;muB_no_adapt&#39;]] \
+    .melt(id_vars=&#39;ad_request_num&#39;) \
+    .rename(columns={&#39;variable&#39;: &#39;Calculated CTR&#39;})
+
+ax[0].axhline(y=real_mean_a, color=&#39;grey&#39;, linestyle=&#39;--&#39;)
+ax[0].axhline(y=real_mean_b, color=&#39;black&#39;, linestyle=&#39;--&#39;)
+sns.lineplot(x=&#39;ad_request_num&#39;, y=&#39;value&#39;, data=dg_eps, ax=ax[0], hue=&#39;Calculated CTR&#39;)
+ax[0].legend(loc=&#39;center left&#39;, bbox_to_anchor=(1, 0.5), labels=[&#39;Real CTR A&#39;, &#39;Real CTR B&#39;, &#39;Calculated CTR A&#39;, &#39;Calculated CTR B&#39;])
+ax[0].set(title=&#39;No adaptation&#39;, ylabel=r&#39;$\mu$&#39;, xlabel=&#39;Ad Request Number&#39;)
+
+# Epsilon - Greedy algorithm
+dg_eps = alg_comp_out_df \
+    [[&#39;ad_request_num&#39;, &#39;muA_epsilon&#39;, &#39;muB_epsilon&#39;]] \
+    .melt(id_vars=&#39;ad_request_num&#39;) \
+    .rename(columns={&#39;variable&#39;: &#39;Calculated CTR&#39;})
+
+ax[1].axhline(y=real_mean_a, color=&#39;grey&#39;, linestyle=&#39;--&#39;)
+ax[1].axhline(y=real_mean_b, color=&#39;black&#39;, linestyle=&#39;--&#39;)
+sns.lineplot(x=&#39;ad_request_num&#39;, y=&#39;value&#39;, data=dg_eps, ax=ax[1], hue=&#39;Calculated CTR&#39;)
+ax[1].legend(loc=&#39;center left&#39;, bbox_to_anchor=(1, 0.5), labels=[&#39;Real CTR A&#39;, &#39;Real CTR B&#39;, &#39;Calculated CTR A&#39;, &#39;Calculated CTR B&#39;])
+ax[1].set(title=&#39;Epsilon - Greedy algorithm&#39;, ylabel=r&#39;$\mu$&#39;, xlabel=&#39;Ad Request Number&#39;)
+
+# UCB1 algorithm
+dg_ucb1 = alg_comp_out_df \
+    [[&#39;ad_request_num&#39;, &#39;muA_ucb1&#39;, &#39;muB_ucb1&#39;]] \
+    .melt(id_vars=&#39;ad_request_num&#39;) \
+    .rename(columns={&#39;variable&#39;: &#39;Calculated CTR&#39;})
+
+ax[2].axhline(y=real_mean_a, color=&#39;grey&#39;, linestyle=&#39;--&#39;)
+ax[2].axhline(y=real_mean_b, color=&#39;black&#39;, linestyle=&#39;--&#39;)
+sns.lineplot(x=&#39;ad_request_num&#39;, y=&#39;value&#39;, data=dg_ucb1, ax=ax[2], hue=&#39;Calculated CTR&#39;)
+ax[2].legend(loc=&#39;center left&#39;, bbox_to_anchor=(1, 0.5), labels=[&#39;Real CTR A&#39;, &#39;Real CTR B&#39;, &#39;Calculated CTR A&#39;, &#39;Calculated CTR B&#39;])
+ax[2].set(title=&#39;UCB1 algorithm&#39;, ylabel=r&#39;$\mu$&#39;, xlabel=&#39;Ad Request Number&#39;)
+
+# Bayesian (Thompson) algorithm
+dg_bayesian = alg_comp_out_df \
+    [[&#39;ad_request_num&#39;, &#39;muA_bayesian&#39;, &#39;muB_bayesian&#39;]] \
+    .melt(id_vars=&#39;ad_request_num&#39;) \
+    .rename(columns={&#39;variable&#39;: &#39;Calculated CTR&#39;})
+
+ax[3].axhline(y=real_mean_a, color=&#39;grey&#39;, linestyle=&#39;--&#39;)
+ax[3].axhline(y=real_mean_b, color=&#39;black&#39;, linestyle=&#39;--&#39;)
+sns.lineplot(x=&#39;ad_request_num&#39;, y=&#39;value&#39;, data=dg_bayesian, ax=ax[3], hue=&#39;Calculated CTR&#39;)
+ax[3].legend(loc=&#39;center left&#39;, bbox_to_anchor=(1, 0.5), labels=[&#39;Real CTR A&#39;, &#39;Real CTR B&#39;, &#39;Calculated CTR A&#39;, &#39;Calculated CTR B&#39;])
+ax[3].set(title=&#39;Bayesian (Thompson) algorithm&#39;, ylabel=r&#39;$\mu$&#39;, xlabel=&#39;Ad Request Number&#39;)
+
+plt.suptitle(&#39;Convergence of the Calculated CTR&#39;, y=1.02, size=&#39;x-large&#39;)
+plt.tight_layout()
+plt.savefig(&#39;plots/convergence_ctr.png&#39;, dpi=200, bbox_inches=&#39;tight&#39;);</code></pre>
+<div class="figure">
+<img src="blogpost_files/blogpost_41_0.svg" alt="svg" />
+<p class="caption">svg</p>
+</div>
+<p>We observe the following:<br />
+- No adaptation: one can clearly see that we had a random split 50%-50%, the behaviour of both ads is very similar and the CTR of both ads converge to their real one (after ca. 500 requests). For ad A in particular the convergence is farther to the real CTR compared to all the other algorithms (which agrees with what we have previously seen in the plots of the distributions).
+- Epsilon-Greedy: ad A is underperforming up to ca. 200 requests and it converges to real CTR after around 500 requests. The convergence of ad B is very similar to the no adaptation method, which stresses the fact we were mentioning before, that this Epsilon-Greedy algorithm is still showing ad B quite some times.
+- UCB1: while ad A converges with a speed similar to no adaptation, it does it much closer to the real CTR. On the other hand, ad B is being much less displayed, which we can see as it has a stairs shape.<br />
+- Bayesian: convergence of ad A is very similar to UCB1 and the curve for ad B is basically flat, which seems to show that this is the method that has explored ad B the least.</p>
+<p>Below I include some stats for each method that validate the observations we have just seen in the plots.</p>
+<pre class="python"><code>end_result = alg_comp_out_df.iloc[- 1].copy()</code></pre>
+<pre class="python"><code>print(&#39;Method: No Adaptation&#39;)
+print(&#39;Views of A:&#39;, end_result[&#39;viewsA_no_adapt&#39;], 
+    &#39;, Clicks on A:&#39;, end_result[&#39;clicksA_no_adapt&#39;], 
+    &#39;, CTR:&#39;, end_result[&#39;muA_no_adapt&#39;], 
+    &#39;, Real CTR A:&#39;, real_mean_a)
+print(&#39;Views of B:&#39;, end_result[&#39;viewsB_no_adapt&#39;], 
+    &#39;, Clicks on B:&#39;, end_result[&#39;clicksB_no_adapt&#39;], 
+    &#39;, CTR:&#39;, end_result[&#39;muB_no_adapt&#39;], 
+    &#39;, Real CTR B:&#39;, real_mean_b)
+print(&#39;Total ads shown:&#39;, end_result[&#39;ad_request_num&#39;], 
+    &#39;, % A shown:&#39;, round(100*end_result[&#39;viewsA_no_adapt&#39;]/end_result[&#39;ad_request_num&#39;], 1), 
+    &#39;, % B shown:&#39;, round(100*end_result[&#39;viewsB_no_adapt&#39;]/end_result[&#39;ad_request_num&#39;], 1))
+print(&#39;Approximated number of lost clicks:&#39;, 
+    round(end_result[&#39;viewsB_no_adapt&#39;]*end_result[&#39;muA_no_adapt&#39;]) - end_result[&#39;clicksB_no_adapt&#39;]
+)</code></pre>
+<p>Method: No Adaptation
+Views of A: 999.0 , Clicks on A: 529.0 , CTR: 0.53 , Real CTR A: 0.51
+Views of B: 1046.0 , Clicks on B: 316.0 , CTR: 0.302 , Real CTR B: 0.31
+Total ads shown: 2045.0 , % A shown: 48.9 , % B shown: 51.1
+Approximated number of lost clicks: 238.0</p>
+<pre class="python"><code>print(&#39;Method: Epsilon-Greedy&#39;)
+print(&#39;Views of A:&#39;, end_result[&#39;viewsA_epsilon&#39;], 
+    &#39;, Clicks on A:&#39;, end_result[&#39;clicksA_epsilon&#39;], 
+    &#39;, CTR:&#39;, end_result[&#39;muA_epsilon&#39;], 
+    &#39;, Real CTR A:&#39;, real_mean_a)
+print(&#39;Views of B:&#39;, end_result[&#39;viewsB_epsilon&#39;], 
+    &#39;, Clicks on B:&#39;, end_result[&#39;clicksB_epsilon&#39;], 
+    &#39;, CTR:&#39;, end_result[&#39;muB_epsilon&#39;], 
+    &#39;, Real CTR B:&#39;, real_mean_b)
+print(&#39;Total ads shown:&#39;, end_result[&#39;ad_request_num&#39;], 
+    &#39;, % A shown:&#39;, round(100*end_result[&#39;viewsA_epsilon&#39;]/end_result[&#39;ad_request_num&#39;], 1), 
+    &#39;, % B shown:&#39;, round(100*end_result[&#39;viewsB_epsilon&#39;]/end_result[&#39;ad_request_num&#39;], 1))
+print(&#39;Approximated number of lost clicks:&#39;, 
+    round(end_result[&#39;viewsB_epsilon&#39;]*end_result[&#39;muA_epsilon&#39;]) - end_result[&#39;clicksB_epsilon&#39;]
+)</code></pre>
+<p>Method: Epsilon-Greedy
+Views of A: 1743.0 , Clicks on A: 905.0 , CTR: 0.519 , Real CTR A: 0.51
+Views of B: 302.0 , Clicks on B: 87.0 , CTR: 0.288 , Real CTR B: 0.31
+Total ads shown: 2045.0 , % A shown: 85.2 , % B shown: 14.8
+Approximated number of lost clicks: 70.0</p>
+<pre class="python"><code>print(&#39;Method: UCB1&#39;)
+print(&#39;Views of A:&#39;, end_result[&#39;viewsA_ucb1&#39;], 
+    &#39;, Clicks on A:&#39;, end_result[&#39;clicksA_ucb1&#39;], 
+    &#39;, CTR:&#39;, end_result[&#39;muA_ucb1&#39;], 
+    &#39;, Real CTR A:&#39;, real_mean_a)
+print(&#39;Views of B:&#39;, end_result[&#39;viewsB_ucb1&#39;], 
+    &#39;, Clicks on B:&#39;, end_result[&#39;clicksB_ucb1&#39;], 
+    &#39;, CTR:&#39;, end_result[&#39;muB_ucb1&#39;], 
+    &#39;, Real CTR B:&#39;, real_mean_b)
+print(&#39;Total ads shown:&#39;, end_result[&#39;ad_request_num&#39;], 
+    &#39;, % A shown:&#39;, round(100*end_result[&#39;viewsA_ucb1&#39;]/end_result[&#39;ad_request_num&#39;], 1), 
+    &#39;, % B shown:&#39;, round(100*end_result[&#39;viewsB_ucb1&#39;]/end_result[&#39;ad_request_num&#39;], 1))
+print(&#39;Approximated number of lost clicks:&#39;, 
+    round(end_result[&#39;viewsB_ucb1&#39;]*end_result[&#39;muA_ucb1&#39;]) - end_result[&#39;clicksB_ucb1&#39;]
+)</code></pre>
+<p>Method: UCB1
+Views of A: 1911.0 , Clicks on A: 977.0 , CTR: 0.511 , Real CTR A: 0.51
+Views of B: 134.0 , Clicks on B: 35.0 , CTR: 0.261 , Real CTR B: 0.31
+Total ads shown: 2045.0 , % A shown: 93.4 , % B shown: 6.6
+Approximated number of lost clicks: 33.0</p>
+<pre class="python"><code>print(&#39;Method: Bayesian&#39;)
+print(&#39;Views of A:&#39;, end_result[&#39;viewsA_bayesian&#39;], 
+    &#39;, Clicks on A:&#39;, end_result[&#39;clicksA_bayesian&#39;], 
+    &#39;, CTR:&#39;, end_result[&#39;muA_bayesian&#39;], 
+    &#39;, Real CTR A:&#39;, real_mean_a)
+print(&#39;Views of B:&#39;, end_result[&#39;viewsB_bayesian&#39;], 
+    &#39;, Clicks on B:&#39;, end_result[&#39;clicksB_bayesian&#39;], 
+    &#39;, CTR:&#39;, end_result[&#39;muB_bayesian&#39;], 
+    &#39;, Real CTR B:&#39;, real_mean_b)
+print(&#39;Total ads shown:&#39;, end_result[&#39;ad_request_num&#39;], 
+    &#39;, % A shown:&#39;, round(100*end_result[&#39;viewsA_bayesian&#39;]/end_result[&#39;ad_request_num&#39;], 1), 
+    &#39;, % B shown:&#39;, round(100*end_result[&#39;viewsB_bayesian&#39;]/end_result[&#39;ad_request_num&#39;], 1))
+print(&#39;Approximated number of lost clicks:&#39;, 
+    round(end_result[&#39;viewsB_bayesian&#39;]*end_result[&#39;muA_bayesian&#39;]) - end_result[&#39;clicksB_bayesian&#39;]
+)</code></pre>
+<p>Method: Bayesian
+Views of A: 1999.0 , Clicks on A: 1014.0 , CTR: 0.507 , Real CTR A: 0.51
+Views of B: 46.0 , Clicks on B: 9.0 , CTR: 0.196 , Real CTR B: 0.31
+Total ads shown: 2045.0 , % A shown: 97.8 , % B shown: 2.2
+Approximated number of lost clicks: 14.0</p>
+</div>
+</div>
+<div id="final-remarks" class="section level2">
+<h2>Final remarks</h2>
+<div id="more-variants-and-more-experiments" class="section level3">
+<h3>More variants and more experiments</h3>
+<p>Note that the implementations are assuming we are experimenting with only 2 variants, but it would not be hard to generalize it to a higher number of variants. May be nice to have the code flexible to work with arbitrary number of variants.</p>
+<p>In any case, if one wants to experiment with other values of Real CTR’s, the code is abstract enough to run all at once just by changing the values at the beginning of this post.</p>
+</div>
+<div id="more-algorithms" class="section level3">
+<h3>More algorithms</h3>
+<p>There are more algorithms out there to deal with the Explore-Exploit Dilemma. When searching for them you can certainly find them looking for multi-bandit problems (instead of displaying ads, you play slot machines). Here I leave a link to an example of a <a href="https://jamesrledoux.com/algorithms/bandit-algorithms-epsilon-ucb-exp-python/">nice blogpost with more algorithms</a> from James LeDoux’s blog.</p>
+</div>
+<div id="when-can-i-stop-gathering-data-for-my-experiment" class="section level3">
+<h3>When can I stop gathering data for my experiment?</h3>
+<p>This is the million €€ question. The literature around this topic is really confusing and I don’t want to add more confusion to your bag. This is why I am skipping this topic in this post. I personally find interesting this <a href="https://www.chrisstucchio.com/blog/2014/bayesian_ab_decision_rule.html">post from Chris Stucchio’s blog</a> but I need to find time to read it carefully.</p>
+</div>
+<div id="canary-releases" class="section level3">
+<h3>Canary releases</h3>
+<p>A/B testing has some similarities to <a href="https://martinfowler.com/bliki/CanaryRelease.html">Canary releases</a>. A Canary release consists of releasing for example a new version of your software, showing it only to a fraction of your users and gradually incrementing the flow when you confirm the new version is behaving “well” (where “well” may just mean that it is stable, or maybe your goal is that conversions of some kind improve,…) so that if there is any issue, you can rollback to the old version easily. Despite its similarities, I find it is a different technique, usually for different purposes, for example:<br />
+- Imagine you update your website from some programing language version v2.x to version 3.y. This is something you want to do because it is best practise, but don’t necessarily mean you want to improve conversions or revenue (of course we would all love that but it is not the main goal of this task). In this case you would use a Canary release.</p>
+<ul>
+<li>For A/B testing you need to set a goal, for example “improve CTR of my landing page 3%” or “reduce bounce rate 2%” and generally it is good practise to make only one change at the time yo that you can attribute the improvement to that change.</li>
+</ul>
+</div>
+</div>
+</div>
