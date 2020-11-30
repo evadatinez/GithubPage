@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <script defer src="https://use.fontawesome.com/releases/v5.13.0/js/all.js"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="generator" content="Hugo 0.74.3" />
+
+
+<title>Exploring Facebook Prophet (BTSA - Book Club) - Datínez</title>
+<meta property="og:title" content="Exploring Facebook Prophet (BTSA - Book Club) - Datínez">
+
+
+
+
+  
+
+
+
+
+
+
+
+
+<link href='//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/atom-one-dark.min.css' rel='stylesheet' type='text/css' />
+
+
+
+<link rel="stylesheet" href="../../../../css/fonts.css" media="all">
+<link rel="stylesheet" href="../../../../css/main.css" media="all">
+
+
+  </head>
+  <body>
+    <div class="wrapper">
+      <header class="header">
+        <nav class="nav">
+  <a href="../../../../" class="nav-logo">
+    <img src="../../../../images/dlogo4.png"
+         width="50"
+         height="50"
+         alt="Logo">
+  </a>
+
+  <ul class="nav-links">
+    
+     <li><a href="../../../../about/"> About</a></li>
+    
+     <li><a href="https://github.com/evadatinez"><i class='fab fa-github fa-lg'></i>  </a></li>
+    
+     <li><a href="https://www.linkedin.com/in/emartiro/"><i class='fab fa-linkedin fa-lg'></i>  </a></li>
+    
+     <li><a href="https://twitter.com/evadatinez"><i class='fab fa-twitter fa-lg'></i>  </a></li>
+    
+  </ul>
+</nav>
+
+      </header>
+
+
+<main class="content" role="main">
+
+  <article class="article">
+    
+    <span class="article-duration">8 min read</span>
+    
+
+    <h1 class="article-title">Exploring Facebook Prophet (BTSA - Book Club)</h1>
+
+    
+    <span class="article-date">2020/11/30</span>
+    
+
+    <div class="article-content">
+      
+<script src="../../../../rmarkdown-libs/header-attrs/header-attrs.js"></script>
+
+
+<p>This notebook contains the code I presented for the <a href="https://github.com/juanitorduz/btsa">BTSA</a> book club session on the 11th August 2020. You can find the description of the session (&amp; other meetup sessions) <a href="https://github.com/juanitorduz/btsa/blob/master/meetup.md#11082020-exploring-facebook-prophet-book-club">here</a>.</p>
+<p>It is an introductory notebook to create predictions of the time series data provided and measure their performance using <a href="https://github.com/juanitorduz/btsa/blob/master/meetup.md">Facebook Prophet</a>.</p>
+<div id="setup-and-data-exploration" class="section level2">
+<h2>Setup and data exploration</h2>
+<pre class="python"><code>import numpy as np
+import pandas as pd
+from fbprophet import Prophet
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+sns.set_style(&#39;darkgrid&#39;, {&#39;axes.facecolor&#39;: &#39;.9&#39;})
+sns.set_palette(palette=&#39;muted&#39;)
+sns_c = sns.color_palette(palette=&#39;muted&#39;)
+%matplotlib inline
+
+from pandas.plotting import register_matplotlib_converters
+register_matplotlib_converters()
+
+# Set global plot parameters 
+plt.rcParams[&#39;figure.figsize&#39;] = [12, 6]
+plt.rcParams[&#39;figure.dpi&#39;] = 100</code></pre>
+<p>The data provided contains a simmulation of <code>sales</code> data between <code>2018-01-01</code> and <code>2021-06-30</code>. In addition there is a feature <code>media</code> which could be used as an external predictor. Below I read the dataset and make simple transformations on the <code>date</code> column.</p>
+<pre class="python"><code># read data
+data_df = pd.read_csv(&#39;../data/sample_data_1.csv&#39;)
+
+data_df = data_df.assign(
+    date = lambda x: pd.to_datetime(x[&#39;date&#39;]), 
+    year = lambda x: x[&#39;date&#39;].dt.year,
+    month = lambda x: x[&#39;date&#39;].dt.month,
+    day = lambda x: x[&#39;date&#39;].dt.day,
+    dayofyear = lambda x: x[&#39;date&#39;].dt.dayofyear
+)
+data_df.head()</code></pre>
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th>
+</th>
+<th>
+date
+</th>
+<th>
+media
+</th>
+<th>
+sales
+</th>
+<th>
+year
+</th>
+<th>
+month
+</th>
+<th>
+day
+</th>
+<th>
+dayofyear
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>
+0
+</th>
+<td>
+2018-01-03
+</td>
+<td>
+0.0
+</td>
+<td>
+6.258472
+</td>
+<td>
+2018
+</td>
+<td>
+1
+</td>
+<td>
+3
+</td>
+<td>
+3
+</td>
+</tr>
+<tr>
+<th>
+1
+</th>
+<td>
+2018-01-04
+</td>
+<td>
+0.0
+</td>
+<td>
+6.170889
+</td>
+<td>
+2018
+</td>
+<td>
+1
+</td>
+<td>
+4
+</td>
+<td>
+4
+</td>
+</tr>
+<tr>
+<th>
+2
+</th>
+<td>
+2018-01-05
+</td>
+<td>
+0.0
+</td>
+<td>
+5.754669
+</td>
+<td>
+2018
+</td>
+<td>
+1
+</td>
+<td>
+5
+</td>
+<td>
+5
+</td>
+</tr>
+<tr>
+<th>
+3
+</th>
+<td>
+2018-01-06
+</td>
+<td>
+0.0
+</td>
+<td>
+5.968413
+</td>
+<td>
+2018
+</td>
+<td>
+1
+</td>
+<td>
+6
+</td>
+<td>
+6
+</td>
+</tr>
+<tr>
+<th>
+4
+</th>
+<td>
+2018-01-07
+</td>
+<td>
+0.0
+</td>
+<td>
+5.285262
+</td>
+<td>
+2018
+</td>
+<td>
+1
+</td>
+<td>
+7
+</td>
+<td>
+7
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Below I include a visualization of the <code>sales</code> and <code>media</code> data over <code>date</code>.</p>
+<pre class="python"><code>fig, ax1 = plt.subplots()
+ax2 = ax1.twinx() 
+sns.lineplot(x=&#39;date&#39;, y=&#39;media&#39;, data=data_df, color=sns_c[9], label=&#39;media&#39;, ax=ax1)
+sns.lineplot(x=&#39;date&#39;, y=&#39;sales&#39;, data=data_df, color=sns_c[5], label=&#39;sales&#39;, ax=ax2)
+ax1.legend(bbox_to_anchor=(1.22, 0.42))
+ax2.legend(bbox_to_anchor=(1.22, 0.5))
+ax1.tick_params(axis=&#39;y&#39;, labelcolor=sns_c[9])
+ax1.set_ylabel(&#39;media&#39;, fontdict={&#39;color&#39;: sns_c[9]})
+ax1.set(title=&#39;Sales and Media&#39;)
+ax2.grid(None)
+ax2.tick_params(axis=&#39;y&#39;, labelcolor=sns_c[5])
+ax2.set_ylabel(&#39;sales&#39;, fontdict={&#39;color&#39;: sns_c[5]});</code></pre>
+<center>
+<img src="../../../../images/btsa_prophet/fbprophet_110820_solution_evamartinez_6_0.png" style="width: 1000px;"/>
+</center>
+<p>Some conclusions I derived from this visualization:</p>
+<ul>
+<li>The dimension <code>media</code> looks like is going to be a good candidate to external predictor of <code>sales</code>.<br />
+</li>
+<li>It looks like the feature <code>sales</code> shows clear yearly + quarterly seasonalities.<br />
+</li>
+<li>The time series <code>sales</code> seems to have a incresing multiplicative trend, since it does not only grows over time but also has increasing variation over time.<br />
+</li>
+<li>Doesn’t look like there are missing <code>sales</code> data other than at the end of the time period (which is expected, since the exercise is to forecast).<br />
+</li>
+<li>There are recurring drops appearing around the middle of the year, I will take a look at whether it coincides with a special date.</li>
+</ul>
+<p>First I confirm my assumption about missing values other than at the end of the period.</p>
+<pre class="python"><code>data_df.tail()</code></pre>
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th>
+</th>
+<th>
+date
+</th>
+<th>
+media
+</th>
+<th>
+sales
+</th>
+<th>
+year
+</th>
+<th>
+month
+</th>
+<th>
+day
+</th>
+<th>
+dayofyear
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>
+1362
+</th>
+<td>
+2021-09-26
+</td>
+<td>
+0.000000
+</td>
+<td>
+NaN
+</td>
+<td>
+2021
+</td>
+<td>
+9
+</td>
+<td>
+26
+</td>
+<td>
+269
+</td>
+</tr>
+<tr>
+<th>
+1363
+</th>
+<td>
+2021-09-27
+</td>
+<td>
+0.000000
+</td>
+<td>
+NaN
+</td>
+<td>
+2021
+</td>
+<td>
+9
+</td>
+<td>
+27
+</td>
+<td>
+270
+</td>
+</tr>
+<tr>
+<th>
+1364
+</th>
+<td>
+2021-09-28
+</td>
+<td>
+0.000000
+</td>
+<td>
+NaN
+</td>
+<td>
+2021
+</td>
+<td>
+9
+</td>
+<td>
+28
+</td>
+<td>
+271
+</td>
+</tr>
+<tr>
+<th>
+1365
+</th>
+<td>
+2021-09-29
+</td>
+<td>
+0.909033
+</td>
+<td>
+NaN
+</td>
+<td>
+2021
+</td>
+<td>
+9
+</td>
+<td>
+29
+</td>
+<td>
+272
+</td>
+</tr>
+<tr>
+<th>
+1366
+</th>
+<td>
+2021-09-30
+</td>
+<td>
+0.000000
+</td>
+<td>
+NaN
+</td>
+<td>
+2021
+</td>
+<td>
+9
+</td>
+<td>
+30
+</td>
+<td>
+273
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<pre class="python"><code>(data_df[data_df.sales.isna()].date.min(), data_df[data_df.sales.notna()].date.max())</code></pre>
+<pre><code>(Timestamp(&#39;2021-07-01 00:00:00&#39;), Timestamp(&#39;2021-06-30 00:00:00&#39;))</code></pre>
+<pre class="python"><code>(data_df.shape[0], data_df[data_df.sales.notna()].shape[0], data_df[data_df.sales.isna()].shape[0])</code></pre>
+<pre><code>(1367, 1275, 92)</code></pre>
+<p>Next I inspect the misterious drops at around mid-year. Let us find out whether it is a consistent date (it may be a special holiday).</p>
+<pre class="python"><code>min_july_df = data_df.loc[data_df.month == 7 ][[&quot;year&quot;, &quot;sales&quot;]].groupby(&quot;year&quot;).min()
+data_join_07min_df = data_df.join(min_july_df, on=&quot;year&quot;, rsuffix=&quot;07_min&quot;)
+data_join_07min_df[data_join_07min_df.sales == data_join_07min_df.sales07_min]
+</code></pre>
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th>
+</th>
+<th>
+date
+</th>
+<th>
+media
+</th>
+<th>
+sales
+</th>
+<th>
+year
+</th>
+<th>
+month
+</th>
+<th>
+day
+</th>
+<th>
+dayofyear
+</th>
+<th>
+sales07_min
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>
+185
+</th>
+<td>
+2018-07-07
+</td>
+<td>
+0.0
+</td>
+<td>
+6.057521
+</td>
+<td>
+2018
+</td>
+<td>
+7
+</td>
+<td>
+7
+</td>
+<td>
+188
+</td>
+<td>
+6.057521
+</td>
+</tr>
+<tr>
+<th>
+550
+</th>
+<td>
+2019-07-07
+</td>
+<td>
+0.0
+</td>
+<td>
+6.591582
+</td>
+<td>
+2019
+</td>
+<td>
+7
+</td>
+<td>
+7
+</td>
+<td>
+188
+</td>
+<td>
+6.591582
+</td>
+</tr>
+<tr>
+<th>
+916
+</th>
+<td>
+2020-07-07
+</td>
+<td>
+0.0
+</td>
+<td>
+10.245428
+</td>
+<td>
+2020
+</td>
+<td>
+7
+</td>
+<td>
+7
+</td>
+<td>
+189
+</td>
+<td>
+10.245428
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>indeed it coincides to 07.07, so I will create a dummy to encode it</p>
+<pre class="python"><code>def is_07_july(ds):
+    date = pd.to_datetime(ds)
+    return (date.month == 7 and date.day == 7)</code></pre>
+<p>Let us incorporate this new dummy in the data and subset the training dataset I will use for forecasting.</p>
+<pre class="python"><code>data_df[&quot;ds&quot;] = data_df.date
+data_df[&quot;y&quot;] = data_df.sales
+data_df[&quot;is_07_july&quot;] = data_df[&quot;ds&quot;].apply(is_07_july)
+
+train_df = data_df[data_df.sales.notna()][[&quot;ds&quot;, &quot;y&quot;, &quot;media&quot;, &quot;is_07_july&quot;]]</code></pre>
+</div>
+<div id="forecasting" class="section level2">
+<h2>Forecasting</h2>
+<p>My idea now is to answer the question:</p>
+<blockquote>
+<p>Is the feature media useful for prediction?</p>
+</blockquote>
+<p>Therefore, I define 2 models:</p>
+<ol style="list-style-type: decimal">
+<li><code>m</code> is a simple model which will have multiplicative seasonality and prophet will capture the seasonality as well.<br />
+</li>
+<li><code>m_w_media_0707</code> is the same model as <code>m</code> with 2 external additive regressors: <code>media</code> and the dummy <code>is_07_july</code>.</li>
+</ol>
+<p>I create a 30 days forecast for each of them.</p>
+<pre class="python"><code>m = Prophet(seasonality_mode=&#39;multiplicative&#39;)
+m.fit(train_df[[&quot;ds&quot;, &quot;y&quot;]])
+future = m.make_future_dataframe(periods=30)
+forecast = m.predict(future)
+forecast[&quot;errors&quot;] = forecast.yhat - train_df.y</code></pre>
+<pre><code>INFO:fbprophet:Disabling daily seasonality. Run prophet with daily_seasonality=True to override this.</code></pre>
+<pre class="python"><code>m_w_media_0707 = Prophet(seasonality_mode=&#39;multiplicative&#39;)
+m_w_media_0707.add_regressor(&quot;media&quot;, mode=&quot;additive&quot;)
+m_w_media_0707.add_regressor(&quot;is_07_july&quot;, mode=&quot;additive&quot;)
+m_w_media_0707.fit(train_df)
+future = m_w_media_0707.make_future_dataframe(periods=30)
+future[&quot;media&quot;] = data_df.loc[data_df.date &lt;= future.ds.max()][&quot;media&quot;]
+future[&quot;is_07_july&quot;] = future[&quot;ds&quot;].apply(is_07_july)
+forecast_w_media_0707 = m_w_media_0707.predict(future)
+forecast_w_media_0707[&quot;errors&quot;] = forecast_w_media_0707.yhat - train_df.y</code></pre>
+<pre><code>INFO:fbprophet:Disabling daily seasonality. Run prophet with daily_seasonality=True to override this.</code></pre>
+<p>Prophet very easily plots the calculated forecast, including the training data &amp; confidence intervals.</p>
+<p>Below, one can cleary see the difference between the two models.</p>
+<pre class="python"><code>fig1 = m.plot(forecast)</code></pre>
+<center>
+<img src="../../../../images/btsa_prophet/fbprophet_110820_solution_evamartinez_22_0.png" style="width: 1000px;"/>
+</center>
+<pre class="python"><code>fig1_media_0707 = m_w_media_0707.plot(forecast_w_media_0707)</code></pre>
+<center>
+<img src="../../../../images/btsa_prophet/fbprophet_110820_solution_evamartinez_23_0.png" style="width: 1000px;"/>
+</center>
+<p>Moreover, with the <code>plot_components</code> function one can very easily inspect the trend and seasonality Prohet captures form the models.</p>
+<p>I have commented out the visualization for the second model since they are the same for both models.</p>
+<pre class="python"><code>fig2 = m.plot_components(forecast)</code></pre>
+<center>
+<img src="../../../../images/btsa_prophet/fbprophet_110820_solution_evamartinez_25_0.png" style="width: 1000px;"/>
+</center>
+<pre class="python"><code># fig2_media_0707 = m_w_media_0707.plot_components(forecast_w_media_0707)</code></pre>
+<p>Next I plot the <code>sales</code> time series with its forecast in the left <code>y</code> axis. In the right <code>y</code> axis one can see the errors of the forecast.</p>
+<p>For the first model (where only seasonality and trend are considered) one can see the big errors in July which dissapear in the second model, thanks to the dummy variable. Also the overal range of errors seems to decrease a bit (from (-2.0, 2.0) to (-1.5, 1.5)). However, in both models there is something annoying at the end 2019. I have tried to create a dummy around those dates but it did not work.</p>
+<pre class="python"><code>fig, ax1 = plt.subplots()
+ax2 = ax1.twinx() 
+sns.lineplot(x=&#39;ds&#39;, y=&#39;errors&#39;, data=forecast, color=sns_c[3], label=&#39;errors&#39;, ax=ax2, alpha=0.6)
+sns.lineplot(x=&#39;ds&#39;, y=&#39;y&#39;, data=data_df[data_df.sales.notna()], color=sns_c[9], label=&#39;sales&#39;, ax=ax1)
+sns.lineplot(x=&#39;ds&#39;, y=&#39;yhat&#39;, data=forecast, color=sns_c[5], label=&#39;forecast&#39;, ax=ax1)
+ax1.legend(bbox_to_anchor=(1.22, 0.42))
+ax2.legend(bbox_to_anchor=(1.22, 0.5))
+ax1.tick_params(axis=&#39;y&#39;)
+ax1.set_ylabel(&#39;sales&#39;)
+ax1.set(title=&#39;Sales and Forecast (solo)&#39;)
+ax2.grid(None)
+ax2.tick_params(axis=&#39;y&#39;, labelcolor=sns_c[3])
+ax2.set_ylabel(&#39;errors&#39;, fontdict={&#39;color&#39;: sns_c[3]});</code></pre>
+<center>
+<img src="../../../../images/btsa_prophet/fbprophet_110820_solution_evamartinez_28_0.png" style="width: 1000px;"/>
+</center>
+<pre class="python"><code>fig, ax1 = plt.subplots()
+ax2 = ax1.twinx() 
+sns.lineplot(x=&#39;ds&#39;, y=&#39;errors&#39;, data=forecast_w_media_0707, color=sns_c[3], label=&#39;errors&#39;, ax=ax2, alpha=0.6)
+sns.lineplot(x=&#39;ds&#39;, y=&#39;y&#39;, data=data_df[data_df.sales.notna()], color=sns_c[9], label=&#39;sales&#39;, ax=ax1)
+sns.lineplot(x=&#39;ds&#39;, y=&#39;yhat&#39;, data=forecast_w_media_0707, color=sns_c[5], label=&#39;forecast&#39;, ax=ax1)
+ax1.legend(bbox_to_anchor=(1.22, 0.42))
+ax2.legend(bbox_to_anchor=(1.22, 0.5))
+ax1.tick_params(axis=&#39;y&#39;)
+ax1.set_ylabel(&#39;sales&#39;)
+ax1.set(title=&#39;Sales and Forecast (with media &amp; 0707)&#39;)
+ax2.grid(None)
+ax2.tick_params(axis=&#39;y&#39;, labelcolor=sns_c[3])
+ax2.set_ylabel(&#39;errors&#39;, fontdict={&#39;color&#39;: sns_c[3]});</code></pre>
+<center>
+<img src="../../../../images/btsa_prophet/fbprophet_110820_solution_evamartinez_29_0.png" style="width: 1000px;"/>
+</center>
+</div>
+<div id="evaluation-of-model-performance" class="section level2">
+<h2>Evaluation of model performance</h2>
+<p>I will make use of Prophet’s crossvalidation function to evaluate the performance of the models created above.</p>
+<p>For this, one needs to set some constants:<br />
+- <code>cv_initial</code>: an initial set of points to be included in the first iteration as training data. Ideally, they should include a full seasonality and trend loop in order to account for it in the following predictions.<br />
+- <code>cv_period</code>: how many data points will be included to the training set after each iteration.<br />
+- <code>cv_horizon</code>: what will be the forecasting window at each iteration. (I personally like the analogy with the horizon which moves with you at every step you make :) )</p>
+<pre class="python"><code>from fbprophet.diagnostics import cross_validation
+cv_initial = &#39;1185 days&#39;
+cv_period = &#39;7 days&#39;
+cv_horizon = &#39;30 days&#39;
+df_cv = cross_validation(m, initial=cv_initial, 
+                            period=cv_period, horizon = cv_horizon)
+# df_cv.head()</code></pre>
+<pre><code>INFO:fbprophet:Making 9 forecasts with cutoffs between 2021-04-05 00:00:00 and 2021-05-31 00:00:00</code></pre>
+<pre class="python"><code>df_cv_w_media_0707 = cross_validation(m_w_media_0707, initial=cv_initial,       
+                                        period=cv_period, horizon = cv_horizon)
+# df_cv_w_media_0707.head()</code></pre>
+<pre><code>INFO:fbprophet:Making 9 forecasts with cutoffs between 2021-04-05 00:00:00 and 2021-05-31 00:00:00</code></pre>
+<p>Later, with the <code>performance_metrics</code> function, one gets a dataframe summarizing the metrics averaging the forecast errors at every horizon day.</p>
+<pre class="python"><code>from fbprophet.diagnostics import performance_metrics
+df_p = performance_metrics(df_cv)
+df_p.head()</code></pre>
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th>
+</th>
+<th>
+horizon
+</th>
+<th>
+mse
+</th>
+<th>
+rmse
+</th>
+<th>
+mae
+</th>
+<th>
+mape
+</th>
+<th>
+mdape
+</th>
+<th>
+coverage
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>
+0
+</th>
+<td>
+3 days
+</td>
+<td>
+0.184054
+</td>
+<td>
+0.429015
+</td>
+<td>
+0.372012
+</td>
+<td>
+0.032679
+</td>
+<td>
+0.030733
+</td>
+<td>
+0.851852
+</td>
+</tr>
+<tr>
+<th>
+1
+</th>
+<td>
+4 days
+</td>
+<td>
+0.161923
+</td>
+<td>
+0.402396
+</td>
+<td>
+0.338746
+</td>
+<td>
+0.029616
+</td>
+<td>
+0.030733
+</td>
+<td>
+0.925926
+</td>
+</tr>
+<tr>
+<th>
+2
+</th>
+<td>
+5 days
+</td>
+<td>
+0.219794
+</td>
+<td>
+0.468822
+</td>
+<td>
+0.363396
+</td>
+<td>
+0.031197
+</td>
+<td>
+0.028344
+</td>
+<td>
+0.814815
+</td>
+</tr>
+<tr>
+<th>
+3
+</th>
+<td>
+6 days
+</td>
+<td>
+0.243696
+</td>
+<td>
+0.493656
+</td>
+<td>
+0.374984
+</td>
+<td>
+0.031986
+</td>
+<td>
+0.022488
+</td>
+<td>
+0.777778
+</td>
+</tr>
+<tr>
+<th>
+4
+</th>
+<td>
+7 days
+</td>
+<td>
+0.287547
+</td>
+<td>
+0.536234
+</td>
+<td>
+0.399342
+</td>
+<td>
+0.033638
+</td>
+<td>
+0.023716
+</td>
+<td>
+0.740741
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<pre class="python"><code>df_p_w_media_0707 = performance_metrics(df_cv_w_media_0707)
+df_p_w_media_0707.head()</code></pre>
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th>
+</th>
+<th>
+horizon
+</th>
+<th>
+mse
+</th>
+<th>
+rmse
+</th>
+<th>
+mae
+</th>
+<th>
+mape
+</th>
+<th>
+mdape
+</th>
+<th>
+coverage
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>
+0
+</th>
+<td>
+3 days
+</td>
+<td>
+0.138125
+</td>
+<td>
+0.371652
+</td>
+<td>
+0.300312
+</td>
+<td>
+0.026310
+</td>
+<td>
+0.021001
+</td>
+<td>
+0.814815
+</td>
+</tr>
+<tr>
+<th>
+1
+</th>
+<td>
+4 days
+</td>
+<td>
+0.118737
+</td>
+<td>
+0.344582
+</td>
+<td>
+0.284383
+</td>
+<td>
+0.024855
+</td>
+<td>
+0.018320
+</td>
+<td>
+0.814815
+</td>
+</tr>
+<tr>
+<th>
+2
+</th>
+<td>
+5 days
+</td>
+<td>
+0.106944
+</td>
+<td>
+0.327023
+</td>
+<td>
+0.243355
+</td>
+<td>
+0.021236
+</td>
+<td>
+0.013283
+</td>
+<td>
+0.814815
+</td>
+</tr>
+<tr>
+<th>
+3
+</th>
+<td>
+6 days
+</td>
+<td>
+0.112950
+</td>
+<td>
+0.336080
+</td>
+<td>
+0.244234
+</td>
+<td>
+0.021324
+</td>
+<td>
+0.010519
+</td>
+<td>
+0.814815
+</td>
+</tr>
+<tr>
+<th>
+4
+</th>
+<td>
+7 days
+</td>
+<td>
+0.104026
+</td>
+<td>
+0.322530
+</td>
+<td>
+0.245283
+</td>
+<td>
+0.021298
+</td>
+<td>
+0.016246
+</td>
+<td>
+0.851852
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<pre class="python"><code># extracting the horizon days
+df_p = df_p.assign(
+    horizon_days = lambda x: x[&#39;horizon&#39;].dt.days
+)
+df_p_w_media_0707 = df_p_w_media_0707.assign(
+    horizon_days = lambda x: x[&#39;horizon&#39;].dt.days
+)</code></pre>
+<p>Finally, by selecting the desired metric in the <code>metric_to_plot</code> variable, I plot a comparison of the desired performance metric for both metric.</p>
+<p>As an example, I select the <code>mae</code>= <em>Mean Absolute Error</em>. It shows that the second model performs much better than the simple one.</p>
+<pre class="python"><code>metric_to_plot = &#39;mae&#39;</code></pre>
+<pre class="python"><code>df_perf_plot_wide = df_p[[&#39;horizon_days&#39;, metric_to_plot]].join(df_p_w_media_0707[[&#39;horizon_days&#39;, metric_to_plot]].set_index(&#39;horizon_days&#39;), on=&#39;horizon_days&#39;,  lsuffix=&#39;_simple&#39;, rsuffix=&#39;_w_media_0707&#39;)
+df_perf_plot_long = pd.melt(df_perf_plot_wide, id_vars=[&#39;horizon_days&#39;], value_vars=[metric_to_plot + &#39;_simple&#39;, metric_to_plot + &#39;_w_media_0707&#39;])</code></pre>
+<pre class="python"><code>fig, ax = plt.subplots()
+sns.barplot(x=&#39;horizon_days&#39;, y=&#39;value&#39;, hue=&#39;variable&#39;, data=df_perf_plot_long, ax=ax)
+ax.legend(bbox_to_anchor=(1.22, 0.42))
+ax.set(title=f&#39;Comparison of {metric_to_plot} (simple model vs with media &amp; 0707)&#39;);</code></pre>
+<center>
+<img src="../../../../images/btsa_prophet/fbprophet_110820_solution_evamartinez_40_0.png" style="width: 1000px;"/>
+</center>
+<p>If one wants more detail, the <code>plot_cross_validation_metric</code> function easily plots the average metrics with the real values for each horizon day.</p>
+<pre class="python"><code>from fbprophet.plot import plot_cross_validation_metric
+fig = plot_cross_validation_metric(df_cv, metric=metric_to_plot)</code></pre>
+<center>
+<img src="../../../../images/btsa_prophet/fbprophet_110820_solution_evamartinez_42_0.png" style="width: 1000px;"/>
+</center>
+<pre class="python"><code>fig = plot_cross_validation_metric(df_cv_w_media_0707, metric=metric_to_plot)</code></pre>
+<center>
+<img src="../../../../images/btsa_prophet/fbprophet_110820_solution_evamartinez_43_0.png" style="width: 1000px;"/>
+</center>
+</div>
+
+    </div>
+  </article>
+
+  
+
+
+</main>
+
+      <footer class="footer">
+        <ul class="footer-links">
+          <li>
+            <a href="../../../../index.xml" type="application/rss+xml" target="_blank">RSS feed</a>
+          </li>
+          <li>
+            <a href="https://gohugo.io/" class="footer-links-kudos">Made with <img src="../../../../images/hugo-logo.png" alt="Img link to Hugo website" width="22" height="22"></a>
+          </li>
+        </ul>
+      </footer>
+
+    </div>
+    
+
+
+
+<script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+
+
+
+<script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/languages/r.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/languages/yaml.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/languages/python.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/languages/bash.min.js"></script>
+<script>hljs.configure({languages: []}); hljs.initHighlightingOnLoad();</script>
+
+
+
+    
+
+    
+<script type="application/javascript">
+var doNotTrack = false;
+if (!doNotTrack) {
+	(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+	(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+	m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+	})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+	ga('create', 'UA-132832089-1', 'auto');
+	
+	ga('send', 'pageview');
+}
+</script>
+
+  </body>
+</html>
+
