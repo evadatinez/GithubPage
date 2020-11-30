@@ -74,6 +74,8 @@
     <div class="article-content">
       
 <script src="../../../../rmarkdown-libs/header-attrs/header-attrs.js"></script>
+<link href="../../../../rmarkdown-libs/anchor-sections/anchor-sections.css" rel="stylesheet" />
+<script src="../../../../rmarkdown-libs/anchor-sections/anchor-sections.js"></script>
 
 
 <p>This notebook contains the code I presented for the <a href="https://github.com/juanitorduz/btsa">BTSA</a> book club session on the 11th August 2020. You can find the description of the session (&amp; other meetup sessions) <a href="https://github.com/juanitorduz/btsa/blob/master/meetup.md#11082020-exploring-facebook-prophet-book-club">here</a>.</p>
@@ -694,7 +696,6 @@ forecast_w_media_0707[&quot;errors&quot;] = forecast_w_media_0707.yhat - train_d
 </center>
 <pre class="python"><code># fig2_media_0707 = m_w_media_0707.plot_components(forecast_w_media_0707)</code></pre>
 <p>Next I plot the <code>sales</code> time series with its forecast in the left <code>y</code> axis. In the right <code>y</code> axis one can see the errors of the forecast.</p>
-<p>For the first model (where only seasonality and trend are considered) one can see the big errors in July which dissapear in the second model, thanks to the dummy variable. Also the overal range of errors seems to decrease a bit (from (-2.0, 2.0) to (-1.5, 1.5)). However, in both models there is something annoying at the end 2019. I have tried to create a dummy around those dates but it did not work.</p>
 <pre class="python"><code>fig, ax1 = plt.subplots()
 ax2 = ax1.twinx() 
 sns.lineplot(x=&#39;ds&#39;, y=&#39;errors&#39;, data=forecast, color=sns_c[3], label=&#39;errors&#39;, ax=ax2, alpha=0.6)
@@ -727,14 +728,19 @@ ax2.set_ylabel(&#39;errors&#39;, fontdict={&#39;color&#39;: sns_c[3]});</code></
 <center>
 <img src="../../../../images/btsa_prophet/fbprophet_110820_solution_evamartinez_29_0.png" style="width: 1000px;"/>
 </center>
+<p>For the first model (where only seasonality and trend are considered) one can see the big errors in July which dissapear in the second model, thanks to the dummy variable. Also the overal range of errors seems to decrease a bit (from (-2.0, 2.0) to (-1.5, 1.5)). However, in both models there is something annoying at the end 2019. I have tried to create a dummy around those dates but it did not work.</p>
 </div>
 <div id="evaluation-of-model-performance" class="section level2">
 <h2>Evaluation of model performance</h2>
 <p>I will make use of Prophet’s crossvalidation function to evaluate the performance of the models created above.</p>
-<p>For this, one needs to set some constants:<br />
-- <code>cv_initial</code>: an initial set of points to be included in the first iteration as training data. Ideally, they should include a full seasonality and trend loop in order to account for it in the following predictions.<br />
-- <code>cv_period</code>: how many data points will be included to the training set after each iteration.<br />
-- <code>cv_horizon</code>: what will be the forecasting window at each iteration. (I personally like the analogy with the horizon which moves with you at every step you make :) )</p>
+<p>For this, one needs to set some constants:</p>
+<ul>
+<li><code>cv_initial</code>: an initial set of points to be included in the first iteration as training data. Ideally, they should include a full seasonality and trend loop in order to account for it in the following predictions.<br />
+</li>
+<li><code>cv_period</code>: how many data points will be included to the training set after each iteration.<br />
+</li>
+<li><code>cv_horizon</code>: what will be the forecasting window at each iteration. (I personally like the analogy with the horizon which moves with you at every step you make :) )</li>
+</ul>
 <pre class="python"><code>from fbprophet.diagnostics import cross_validation
 cv_initial = &#39;1185 days&#39;
 cv_period = &#39;7 days&#39;

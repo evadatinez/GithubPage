@@ -6,10 +6,21 @@
     <description>Recent content on Datínez</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
-    <lastBuildDate>Sat, 23 May 2020 00:00:00 +0000</lastBuildDate>
+    <lastBuildDate>Mon, 30 Nov 2020 00:00:00 +0000</lastBuildDate>
     
 	<atom:link href="https://evadatinez.github.io/index.xml" rel="self" type="application/rss+xml" />
     
+    
+    <item>
+      <title>Exploring Facebook Prophet (BTSA - Book Club)</title>
+      <link>https://evadatinez.github.io/2020/11/30/intro_prophet_btsa/</link>
+      <pubDate>Mon, 30 Nov 2020 00:00:00 +0000</pubDate>
+      
+      <guid>https://evadatinez.github.io/2020/11/30/intro_prophet_btsa/</guid>
+      <description>This notebook contains the code I presented for the BTSA book club session on the 11th August 2020. You can find the description of the session (&amp;amp; other meetup sessions) here.
+It is an introductory notebook to create predictions of the time series data provided and measure their performance using Facebook Prophet.
+Setup and data exploration import numpy as np import pandas as pd from fbprophet import Prophet import matplotlib.</description>
+    </item>
     
     <item>
       <title>Bayesian A/B Testing - Solving Explore vs Exploit Dilemma with Python</title>
